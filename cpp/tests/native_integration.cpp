@@ -47,7 +47,7 @@ bool check(bool passed, const char* name) {
     return passed;
 }
 
-} // namespace
+}
 
 int main(int argc, char** argv) {
     if (argc != 2) {

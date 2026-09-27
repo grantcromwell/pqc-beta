@@ -33,20 +33,22 @@ add_executable(qprotect_cpp_tool apps/qprotect_tool.cpp)
 target_link_libraries(qprotect_cpp_tool PRIVATE qprotect_cpp)
 target_include_directories(qprotect_cpp_tool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# Keep the transition-era target while providing the stable native CLI name.
 add_executable(qprotect apps/qprotect_tool.cpp)
 target_link_libraries(qprotect PRIVATE qprotect_cpp)
 target_include_directories(qprotect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(qprotect_cpp_unittests tests/unit_tests.cpp)
 target_link_libraries(qprotect_cpp_unittests PRIVATE qprotect_cpp)
-# Unit tests reach the internal JSON header under src/.
 target_include_directories(qprotect_cpp_unittests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(qprotect_native_integration tests/native_integration.cpp)
 
 add_executable(qprotect_startup_tests tests/startup_tests.cpp)
 target_link_libraries(qprotect_startup_tests PRIVATE qprotect_cpp)
+
+add_executable(qprotect_diagnostics_tests tests/diagnostics_tests.cpp)
+target_link_libraries(qprotect_diagnostics_tests PRIVATE qprotect_cpp)
+target_include_directories(qprotect_diagnostics_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 enable_testing()
 add_test(NAME qprotect_cpp_selftest
@@ -55,6 +57,8 @@ add_test(NAME qprotect_cpp_unittests
          COMMAND qprotect_cpp_unittests)
 add_test(NAME qprotect_startup_tests
          COMMAND qprotect_startup_tests)
+add_test(NAME qprotect_diagnostics_tests
+         COMMAND qprotect_diagnostics_tests)
 add_test(NAME qprotect_native_integration
          COMMAND qprotect_native_integration $<TARGET_FILE:qprotect>)
 

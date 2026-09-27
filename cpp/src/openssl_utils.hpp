@@ -64,4 +64,4 @@ struct LibraryContextDeleter {
 using ProviderPtr = std::unique_ptr<OSSL_PROVIDER, ProviderDeleter>;
 using LibraryContextPtr = std::unique_ptr<OSSL_LIB_CTX, LibraryContextDeleter>;
 
-} // namespace qprotect::cpp::detail
+}

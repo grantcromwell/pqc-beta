@@ -1,6 +1,3 @@
-// qprotect C++ tool: key generation and KEM/AEAD envelope encryption for
-// files using PEM keys and the qprotect envelope JSON format.
-
 #include "qprotect/algorithms.hpp"
 #include "qprotect/constants.hpp"
 #include "qprotect/crypto_context.hpp"
@@ -139,7 +136,7 @@ void print_health_report(
         const auto& check = report.checks[index];
         std::cout << "    {\"name\": \"" << json_escape(check.name)
                   << "\", \"passed\": " << (check.passed ? "true" : "false") << "}";
-        if (index + 1 != report.checks.size() || (full_selftest && round_trip)) {
+        if (index + 1 != report.checks.size() || full_selftest) {
             std::cout << ",";
         }
         std::cout << "\n";
@@ -646,7 +643,7 @@ int run_disk(const Arguments& args) {
     return 0;
 }
 
-} // namespace
+}
 
 int main(int argc, char* argv[]) {
     if (argc == 1 || std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h") {

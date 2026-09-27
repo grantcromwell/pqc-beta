@@ -9,6 +9,45 @@
 namespace qprotect::cpp::json {
 namespace {
 
+void validate_utf8(const std::string& text) {
+    for (std::size_t offset = 0; offset < text.size();) {
+        const auto first = static_cast<unsigned char>(text[offset++]);
+        if (first < 0x80) continue;
+        unsigned int codepoint;
+        unsigned int minimum;
+        std::size_t remaining;
+        if (first >= 0xC2 && first <= 0xDF) {
+            codepoint = first & 0x1F;
+            minimum = 0x80;
+            remaining = 1;
+        } else if (first >= 0xE0 && first <= 0xEF) {
+            codepoint = first & 0x0F;
+            minimum = 0x800;
+            remaining = 2;
+        } else if (first >= 0xF0 && first <= 0xF4) {
+            codepoint = first & 0x07;
+            minimum = 0x10000;
+            remaining = 3;
+        } else {
+            throw EnvelopeError("invalid JSON: invalid UTF-8");
+        }
+        if (remaining > text.size() - offset) {
+            throw EnvelopeError("invalid JSON: truncated UTF-8");
+        }
+        while (remaining-- > 0) {
+            const auto next = static_cast<unsigned char>(text[offset++]);
+            if ((next & 0xC0) != 0x80) {
+                throw EnvelopeError("invalid JSON: invalid UTF-8 continuation");
+            }
+            codepoint = (codepoint << 6) | (next & 0x3F);
+        }
+        if (codepoint < minimum || codepoint > 0x10FFFF ||
+            (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+            throw EnvelopeError("invalid JSON: invalid Unicode codepoint");
+        }
+    }
+}
+
 class Parser {
 public:
     explicit Parser(const std::string& text) : text_(text) {}
@@ -184,6 +223,7 @@ private:
             }
             const unsigned char c = static_cast<unsigned char>(text_[position_++]);
             if (c == '"') {
+                validate_utf8(out);
                 return out;
             }
             if (c < 0x20) {
@@ -209,7 +249,7 @@ private:
                 case 'u': {
                     unsigned int codepoint = parse_hex4();
                     if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
-                        // High surrogate must be followed by \uDC00-\uDFFF.
+
                         if (position_ + 1 >= text_.size() ||
                             text_[position_] != '\\' || text_[position_ + 1] != 'u') {
                             fail("unpaired surrogate");
@@ -294,8 +334,8 @@ private:
 };
 
 void append_escaped(std::string& out, const std::string& value) {
-    // Escape quotes, backslashes, and C0 controls, using short escapes where
-    // available. Preserve all other characters as UTF-8.
+    validate_utf8(value);
+
     static const char hex[] = "0123456789abcdef";
     out.push_back('"');
     for (const char raw : value) {
@@ -343,7 +383,7 @@ void append_scalar(std::string& out, const Value& value) {
             break;
         }
         case Value::Type::String: append_escaped(out, value.as_string()); break;
-        default: break; // handled by the container serializer
+        default: break;
     }
 }
 
@@ -434,7 +474,7 @@ void append_pretty(std::string& out, const Value& value, int indent, int depth) 
     }
 }
 
-} // namespace
+}
 
 bool Value::as_boolean() const {
     if (type_ != Type::Boolean) {
@@ -504,4 +544,4 @@ Value Value::parse(const std::string& text) {
     return Parser(text).parse_document();
 }
 
-} // namespace qprotect::cpp::json
+}

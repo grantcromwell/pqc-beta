@@ -12,6 +12,7 @@ NATIVE_TOOL := $(BUILD_DIR)/qprotect
 UNITTESTS := $(BUILD_DIR)/qprotect_cpp_unittests
 INTEGRATION := $(BUILD_DIR)/qprotect_native_integration
 STARTUP_TESTS := $(BUILD_DIR)/qprotect_startup_tests
+DIAGNOSTICS_TESTS := $(BUILD_DIR)/qprotect_diagnostics_tests
 
 SOURCES := \
     src/crypto_context.cpp \
@@ -58,6 +59,9 @@ $(INTEGRATION): $(BUILD_DIR)/native_integration.o
 $(STARTUP_TESTS): $(BUILD_DIR)/startup_tests.o $(LIBRARY)
 	$(CXX) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
 
+$(DIAGNOSTICS_TESTS): $(BUILD_DIR)/diagnostics_tests.o $(LIBRARY)
+	$(CXX) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
+
 $(BUILD_DIR)/selftest_main.o: apps/selftest_main.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -c $< -o $@
 
@@ -73,10 +77,14 @@ $(BUILD_DIR)/native_integration.o: tests/native_integration.cpp | $(BUILD_DIR)
 $(BUILD_DIR)/startup_tests.o: tests/startup_tests.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -c $< -o $@
 
-test: $(SELFTEST) $(UNITTESTS) $(STARTUP_TESTS)
+$(BUILD_DIR)/diagnostics_tests.o: tests/diagnostics_tests.cpp apps/qprotect_tool.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Isrc -c $< -o $@
+
+test: $(SELFTEST) $(UNITTESTS) $(STARTUP_TESTS) $(DIAGNOSTICS_TESTS)
 	$(SELFTEST)
 	$(UNITTESTS)
 	$(STARTUP_TESTS)
+	$(DIAGNOSTICS_TESTS)
 
 integration: all $(INTEGRATION)
 	$(INTEGRATION) $(NATIVE_TOOL)

@@ -241,7 +241,7 @@ void validate_options(const DiskPlanOptions& options) {
     }
 }
 
-} // namespace
+}
 
 std::string detail::trusted_disk_executable(const std::string& name) {
     if (name != "cryptsetup" && name != "lsblk") {
@@ -516,7 +516,7 @@ void execute_with_header(std::vector<std::string> arguments, const DiskPlanOptio
     execute(arguments, header.get());
 }
 
-} // namespace
+}
 
 std::vector<std::string> format_luks2_arguments(const DiskPlanOptions& options) {
     validate_options(options);
@@ -724,4 +724,4 @@ void execute_luks2_close(const Luks2Plan& plan) {
     execute(arguments);
 }
 
-} // namespace qprotect::cpp
+}

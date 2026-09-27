@@ -8,11 +8,6 @@
 
 namespace qprotect::cpp {
 
-/// Byte container that is zeroized when destroyed.
-///
-/// This is best-effort in a general-purpose process. A validated deployment
-/// must document memory hygiene and platform behavior in the CMVP security
-/// policy.
 class SecureBytes {
 public:
     using value_type = unsigned char;
@@ -68,8 +63,6 @@ public:
         data_.assign(input.begin(), input.end());
     }
 
-    /// Resize through a replacement buffer so the previous allocation is
-    /// overwritten before it can be released.
     void resize(std::size_t size) {
         std::vector<value_type> replacement(size);
         const std::size_t retained = size < data_.size() ? size : data_.size();
@@ -96,4 +89,4 @@ private:
     std::vector<value_type> data_;
 };
 
-} // namespace qprotect::cpp
+}

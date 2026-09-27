@@ -1,13 +1,5 @@
 #pragma once
 
-// Pinned NIST ACVP sample vectors for FIPS 203 and FIPS 204.
-// Source: https://github.com/usnistgov/ACVP-Server
-// Revision: 975de31eb83d87039ec88934fdc47d8c312b892d
-//
-// These are public validation values, not operational secrets. Large expected
-// outputs are stored as SHA-384 fingerprints to keep the compiled self-test
-// compact while making the comparison cryptographically binding.
-
 #include <string_view>
 
 namespace qprotect::cpp::nist_acvp {
@@ -15,7 +7,6 @@ namespace qprotect::cpp::nist_acvp {
 inline constexpr std::string_view revision =
     "975de31eb83d87039ec88934fdc47d8c312b892d";
 
-// ML-KEM / keyGen / FIPS203, ML-KEM-1024, tgId 3, tcId 51.
 inline constexpr std::string_view ml_kem_keygen_seed =
     "F3A706FAF090C03DB506863AB0B20BD8A1627956318E88C67EB875E8E726600935D2BC43DD1CC879F765BF2A0C5E2978"
     "89DDE910E57E2BB0EAE417B90AB7A275"
@@ -27,8 +18,6 @@ inline constexpr std::string_view ml_kem_keygen_dk_sha384 =
     "8f75d07d5b1d811a7730ef053947072831e583d310ac01239bd122bca8c0cc08"
     "39ee3ef1451bbb9f2125c7b7772d0e45";
 
-// ML-KEM / encapDecap / FIPS203, encapsulation, ML-KEM-1024,
-// tgId 3, tcId 51.
 inline constexpr std::string_view ml_kem_encap_ek =
     "2191ABB6D6BEEE29C5780758A970349879B61A028DEEA5404731292346C81EEB1D17766AFBCAA68C867D91132F34A494"
     "E28CAA767241B50902F4825771865FC8D633736248963A253DD52C1A07C7177CB6DF74C43C3C74D7133DA9DC915FE14B"
@@ -74,7 +63,6 @@ inline constexpr std::string_view ml_kem_encap_k =
     "5087E3B0C90BF601DD6501E071270EFF8683621E9F5D67A7A668E50C4F460A75"
 ;
 
-// ML-DSA / keyGen / FIPS204, ML-DSA-87, tgId 3, tcId 51.
 inline constexpr std::string_view ml_dsa_keygen_seed =
     "A16F5B0796703E2D1A0140A35CBF36EFABE70E752BA59B6A9A0E9C4B05302F73"
 ;
@@ -85,8 +73,6 @@ inline constexpr std::string_view ml_dsa_keygen_sk_sha384 =
     "b76ccc20bdd7c7f58f067c2a745b3835f01ed3cbfa20c9e692d73309e0508a85"
     "cbb5d109c05342b11dc86924199fb6ce";
 
-// ML-DSA / sigGen / FIPS204, deterministic internal interface, ML-DSA-87,
-// tgId 12, tcId 172.
 inline constexpr std::string_view ml_dsa_siggen_sk =
     "1BFF19FAE7236F87AD8DDA1341AC28BEE33C0C92FF3AC093CC0FAB1987EB06E0ADDE92BADEC97E75D2C3CBA014FAFDCB"
     "47E081DAD95D565251DD842EBDD9F9B47F1566A251A5AE48CEFA1D8E72AE7B751CCAAC14D8612C5D265F395B1F65DEB2"
@@ -198,5 +184,5 @@ inline constexpr std::string_view ml_dsa_siggen_signature_sha384 =
     "ea996230c7ad0e02efb7f5c17850c995bbab52380b54b156810acaf59a32551e"
     "bff94f16e1716716b11d4c8bdd984ee9";
 
-} // namespace qprotect::cpp::nist_acvp
+}
 

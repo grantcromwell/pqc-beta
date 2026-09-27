@@ -290,7 +290,7 @@ void discover_devices(std::vector<Capability>& output, const detail::HardwarePat
 
 #endif
 
-} // namespace
+}
 
 std::string detail::hardware_report_text(const HardwarePaths& paths) {
     std::vector<Capability> capabilities;
@@ -325,4 +325,4 @@ std::string hardware_report_text() {
     return detail::hardware_report_text(detail::HardwarePaths{});
 }
 
-} // namespace qprotect::cpp
+}

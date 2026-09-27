@@ -80,8 +80,7 @@ std::string base64_encode(std::span<const unsigned char> input) {
 }
 
 SecureBytes base64_decode(const std::string& value, const char* field) {
-    // Require the base64 alphabet and padding for incomplete groups;
-    // whitespace and other characters are rejected.
+
     if (!value.empty() && value.back() == '\n') {
         throw EnvelopeError(std::string("invalid base64 field: ") + field);
     }
@@ -90,6 +89,10 @@ SecureBytes base64_decode(const std::string& value, const char* field) {
     for (std::size_t i = 0; i < value.size(); ++i) {
         if (value[i] == '=') {
             padding = value.size() - i;
+            if (!std::all_of(value.begin() + static_cast<std::ptrdiff_t>(i), value.end(),
+                             [](char c) { return c == '='; })) {
+                throw EnvelopeError(std::string("invalid base64 field: ") + field);
+            }
             break;
         }
         if (!is_base64_char(value[i])) {
@@ -114,8 +117,13 @@ SecureBytes base64_decode(const std::string& value, const char* field) {
         if (c >= 'a' && c <= 'z') return static_cast<unsigned int>(c - 'a' + 26);
         if (c >= '0' && c <= '9') return static_cast<unsigned int>(c - '0' + 52);
         if (c == '+') return 62;
-        return 63; // '/'
+        return 63;
     };
+
+    if ((leftover == 2 && (decode_char(data.back()) & 0x0F) != 0) ||
+        (leftover == 3 && (decode_char(data.back()) & 0x03) != 0)) {
+        throw EnvelopeError(std::string("invalid base64 field: ") + field);
+    }
 
     SecureBytes out(total);
     std::size_t offset = 0;
@@ -154,7 +162,7 @@ bool is_valid_key_id(const std::string& key_id) {
 }
 
 void validate_context(const std::string& context) {
-    // Contexts are non-empty printable ASCII strings of at most 128 bytes.
+
     if (context.empty() || context.size() > 128) {
         throw EnvelopeError("context must be a non-empty string of at most 128 characters");
     }
@@ -194,7 +202,7 @@ SecureBytes wrap_info_bytes(const std::string& context, const std::string& key_i
 }
 
 std::string utc_now_iso8601() {
-    // UTC timestamp with six fractional digits and a trailing Z.
+
     const auto now = std::chrono::system_clock::now();
     const std::time_t seconds = std::chrono::system_clock::to_time_t(now);
     const auto fraction = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -266,13 +274,10 @@ json::Value envelope_to_dict(const Envelope& envelope, bool include_signature) {
     return json::Value(std::move(out));
 }
 
-/// Canonical JSON of the unsigned envelope, used as ML-DSA-87 signature material.
 std::string signature_material(const Envelope& envelope) {
     return envelope_to_dict(envelope, false).canonical();
 }
 
-/// Canonical JSON of the unsigned envelope header without the payload
-/// ciphertext and tag, used as AES-256-GCM payload AAD.
 std::string payload_aad(const Envelope& envelope) {
     json::Object header = envelope_to_dict(envelope, false).as_object();
     header.erase("ciphertext");
@@ -334,7 +339,7 @@ const json::Value& require_field(const json::Object& data, const char* key) {
     return it->second;
 }
 
-} // namespace
+}
 
 std::string Envelope::to_json() const {
     if (context.empty() || created_at.empty()) {
@@ -390,8 +395,7 @@ Envelope Envelope::from_json(const std::string& text) {
     if (!created_at.is_string() || !valid_created_at(created_at.as_string())) {
         throw EnvelopeError("invalid created_at");
     }
-    // Compare the suite through its canonical form: exact dict equality with
-    // the expected CNSA 2.0 selection.
+
     if (!suite.is_object() ||
         suite.canonical() != json::Value(suite_object()).canonical()) {
         throw EnvelopeError("algorithm suite does not match CNSA 2.0 target");
@@ -603,8 +607,7 @@ SecureBytes decrypt_envelope(
     }
 
     try {
-        // Decryption failures surface as EnvelopeError, including provider
-        // authentication failures.
+
         const SecureBytes info = wrap_info_bytes(envelope.context, recipient_it->key_id);
         const SecureBytes secret = decapsulate_ml_kem_1024(
             context,
@@ -642,4 +645,4 @@ SecureBytes decrypt_envelope(
     }
 }
 
-} // namespace qprotect::cpp
+}

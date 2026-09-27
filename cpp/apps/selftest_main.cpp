@@ -30,7 +30,7 @@ void print_report(const qprotect::cpp::SelfTestReport& report) {
     std::cout << "}\n";
 }
 
-} // namespace
+}
 
 int main(int argc, char* argv[]) {
     std::string provider = "default";

@@ -130,4 +130,4 @@ CryptoContextHandles CryptoContext::handles() const {
     };
 }
 
-} // namespace qprotect::cpp
+}

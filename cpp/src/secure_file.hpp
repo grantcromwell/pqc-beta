@@ -14,4 +14,4 @@ void secure_write_file(
     bool overwrite
 );
 
-} // namespace qprotect::cpp::detail
+}

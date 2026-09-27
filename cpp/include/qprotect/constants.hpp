@@ -10,4 +10,4 @@ inline constexpr char kdf_algorithm[] = "HKDF";
 inline constexpr char digest384_algorithm[] = "SHA384";
 inline constexpr char digest512_algorithm[] = "SHA512";
 
-} // namespace qprotect::cpp::constants
+}

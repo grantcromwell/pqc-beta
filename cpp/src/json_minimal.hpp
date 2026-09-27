@@ -1,11 +1,5 @@
 #pragma once
 
-// Internal header: not part of the public API.
-//
-// Minimal JSON support for the envelope layer. Sorted keys, UTF-8 text,
-// and fixed separators keep signatures and AAD stable across serialization.
-// Both compact and indented output are supported.
-
 #include <cstdint>
 #include <cmath>
 #include <map>
@@ -18,7 +12,7 @@ namespace qprotect::cpp::json {
 
 class Value;
 using Array = std::vector<Value>;
-// std::map keeps object keys sorted. Valid UTF-8 sorts in codepoint order.
+
 using Object = std::map<std::string, Value>;
 
 class Value {
@@ -56,18 +50,12 @@ public:
     const Array& as_array() const;
     const Object& as_object() const;
 
-    /// Throws EnvelopeError unless the value is an object.
     const Object& expect_object(const char* what) const;
 
-    /// Compact canonical form: sorted keys, separators=(",", ":").
     std::string canonical() const;
 
-    /// Indented form with sorted object keys.
     std::string pretty(int indent) const;
 
-    /// Parse a complete JSON document. Throws EnvelopeError on malformed
-    /// input. Integers and finite floating-point values are accepted; the
-    /// envelope schema still validates its integer-only fields explicitly.
     static Value parse(const std::string& text);
 
 private:
@@ -80,4 +68,4 @@ private:
     Object object_;
 };
 
-} // namespace qprotect::cpp::json
+}

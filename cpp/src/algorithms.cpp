@@ -217,7 +217,7 @@ void update_aad(EVP_CIPHER_CTX* context, std::span<const unsigned char> aad, boo
     }
 }
 
-} // namespace
+}
 
 SecureBytes digest(
     const CryptoContext& context,
@@ -349,8 +349,7 @@ AeadResult aes_256_gcm_encrypt(
     if (cipher_context == nullptr) {
         throw_openssl("EVP_CIPHER_CTX_new");
     }
-    // Select the cipher first, then set the IV length, then provide the key
-    // and IV. The IV length must be fixed before the IV itself is read.
+
     if (EVP_EncryptInit_ex2(
             cipher_context.get(),
             cipher.get(),
@@ -442,8 +441,7 @@ SecureBytes aes_256_gcm_decrypt(
     if (cipher_context == nullptr) {
         throw_openssl("EVP_CIPHER_CTX_new");
     }
-    // Select the cipher first, then set the IV length, then provide the key
-    // and IV. The IV length must be fixed before the IV itself is read.
+
     if (EVP_DecryptInit_ex2(
             cipher_context.get(),
             cipher.get(),
@@ -800,4 +798,4 @@ bool verify_ml_dsa_87(
     ) == 1;
 }
 
-} // namespace qprotect::cpp
+}

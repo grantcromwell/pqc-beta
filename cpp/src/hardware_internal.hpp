@@ -20,4 +20,4 @@ struct HardwarePaths {
 
 std::string hardware_report_text(const HardwarePaths& paths);
 
-} // namespace qprotect::cpp::detail
+}

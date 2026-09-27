@@ -68,4 +68,4 @@ void execute_luks2_format(const Luks2Plan& plan, const std::string& confirmation
 void execute_luks2_open(const Luks2Plan& plan);
 void execute_luks2_close(const Luks2Plan& plan);
 
-} // namespace qprotect::cpp
+}

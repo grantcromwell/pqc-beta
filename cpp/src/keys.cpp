@@ -124,7 +124,6 @@ PKeyPtr parse_public_key(const CryptoContext& context, std::span<const unsigned 
     return PKeyPtr(key);
 }
 
-/// Serialize a public key to SubjectPublicKeyInfo DER.
 SecureBytes encode_public_key(EVP_PKEY* key) {
     unsigned char* buffer = nullptr;
     const int length = i2d_PUBKEY(key, &buffer);
@@ -140,7 +139,6 @@ SecureBytes encode_public_key(EVP_PKEY* key) {
     return out;
 }
 
-/// Serialize a private key to DER in the encoding the algorithm layer accepts.
 SecureBytes encode_private_key(EVP_PKEY* key) {
     unsigned char* buffer = nullptr;
     const int length = i2d_PrivateKey(key, &buffer);
@@ -156,13 +154,12 @@ SecureBytes encode_private_key(EVP_PKEY* key) {
     return out;
 }
 
-} // namespace
+}
 
 SecureBytes load_public_key_file(const CryptoContext& context, const std::string& path) {
     const SecureBytes raw = read_file(path);
     if (!looks_like_pem(raw)) {
-        // Validate the DER and normalize to canonical SubjectPublicKeyInfo DER
-        // so the key_id matches what OpenSSL's own DER conversion produces.
+
         const PKeyPtr key = parse_public_key(context, raw);
         return encode_public_key(key.get());
     }
@@ -172,24 +169,24 @@ SecureBytes load_public_key_file(const CryptoContext& context, const std::string
     if (bio == nullptr) {
         throw_openssl("BIO_new_mem_buf");
     }
-    EVP_PKEY* key = PEM_read_bio_PUBKEY_ex(
+    PKeyPtr key(PEM_read_bio_PUBKEY_ex(
         bio.get(),
         nullptr,
         nullptr,
         nullptr,
         handles.libctx,
         handles.properties
-    );
+    ));
     if (key == nullptr) {
         throw EnvelopeError("invalid public key PEM: " + path);
     }
-    return encode_public_key(key);
+    return encode_public_key(key.get());
 }
 
 SecureBytes load_private_key_file(const CryptoContext& context, const std::string& path) {
     const SecureBytes raw = read_file(path);
     if (!looks_like_pem(raw)) {
-        // Validate the DER through the same parser the algorithm layer uses.
+
         parse_private_key(context, raw);
         return raw;
     }
@@ -199,18 +196,18 @@ SecureBytes load_private_key_file(const CryptoContext& context, const std::strin
     if (bio == nullptr) {
         throw_openssl("BIO_new_mem_buf");
     }
-    EVP_PKEY* key = PEM_read_bio_PrivateKey_ex(
+    PKeyPtr key(PEM_read_bio_PrivateKey_ex(
         bio.get(),
         nullptr,
         nullptr,
         nullptr,
         handles.libctx,
         handles.properties
-    );
+    ));
     if (key == nullptr) {
         throw EnvelopeError("invalid private key PEM: " + path);
     }
-    return encode_private_key(key);
+    return encode_private_key(key.get());
 }
 
 SecureBytes public_key_of_private(
@@ -247,7 +244,7 @@ void write_private_key_pem(
     if (PEM_write_bio_PrivateKey(
             bio.get(),
             key.get(),
-            nullptr,   // no encryption: validated modules handle key protection
+            nullptr,
             nullptr,
             0,
             nullptr,
@@ -260,7 +257,7 @@ void write_private_key_pem(
     if (length <= 0 || data == nullptr) {
         throw_openssl("BIO_get_mem_data");
     }
-    // Private key material: create the file owner-only from the start.
+
     detail::secure_write_file(
         path,
         std::span<const unsigned char>(
@@ -303,4 +300,4 @@ void write_public_key_pem(
     );
 }
 
-} // namespace qprotect::cpp
+}

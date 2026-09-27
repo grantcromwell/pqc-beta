@@ -229,7 +229,7 @@ Value normalize_gps(const Value* value) {
     return Value(std::move(output));
 }
 
-} // namespace
+}
 
 json::Value normalize_identity(const json::Value& input_value) {
     const Object& input = input_value.expect_object("identity input");
@@ -290,4 +290,4 @@ json::Value normalize_identity(const json::Value& input_value) {
     return Value(std::move(result));
 }
 
-} // namespace qprotect::cpp::detail
+}

@@ -31,7 +31,7 @@ void sync_directory(const std::filesystem::path& directory) {
     close_checked(fd, directory.string());
 }
 
-} // namespace
+}
 
 void secure_write_file(
     const std::string& path,
@@ -101,4 +101,4 @@ void secure_write_file(
     }
 }
 
-} // namespace qprotect::cpp::detail
+}

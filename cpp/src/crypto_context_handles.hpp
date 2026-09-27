@@ -1,9 +1,5 @@
 #pragma once
 
-// Internal header: not part of the public API. Defines the OpenSSL handle
-// bundle that CryptoContext::handles() returns. Kept out of the public
-// headers so consumers of the library never need OpenSSL types.
-
 #include <openssl/provider.h>
 #include <openssl/types.h>
 
@@ -16,4 +12,4 @@ struct CryptoContextHandles {
     const char* properties = nullptr;
 };
 
-} // namespace qprotect::cpp
+}

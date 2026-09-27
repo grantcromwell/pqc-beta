@@ -1,10 +1,3 @@
-// Negative-path and behavior unit tests for the qprotect C++ module.
-//
-// The algorithm self-test executable covers known-answer and pairwise
-// consistency checks. This suite covers everything the self-tests do not:
-// parameter validation, tamper rejection, malformed input handling, JSON
-// canonicalization, and envelope round-trips including failure paths.
-
 #include "qprotect/algorithms.hpp"
 #include "qprotect/crypto_context.hpp"
 #include "qprotect/envelope.hpp"
@@ -125,8 +118,6 @@ bool same(const SecureBytes& left, const std::string& right) {
            std::memcmp(left.data(), right.data(), right.size()) == 0;
 }
 
-// ---------------------------------------------------------------- digests
-
 void test_digests(const CryptoContext& context) {
     CHECK(context.random_bytes(0).empty());
 
@@ -135,7 +126,6 @@ void test_digests(const CryptoContext& context) {
     CHECK(digest(context, DigestAlgorithm::Sha512, abc).size() == 64);
     CHECK(digest(context, DigestAlgorithm::Sha384, SecureBytes{}).size() == 48);
 
-    // RFC 6234 known-answer: SHA-384("abc")
     const SecureBytes sha384_abc = digest(context, DigestAlgorithm::Sha384, abc);
     CHECK(same(
         sha384_abc,
@@ -148,8 +138,6 @@ void test_digests(const CryptoContext& context) {
     ));
 }
 
-// -------------------------------------------------------------------- HKDF
-
 void test_hkdf(const CryptoContext& context) {
     const SecureBytes ikm = bytes("secret");
     const SecureBytes salt = bytes("salt");
@@ -161,7 +149,7 @@ void test_hkdf(const CryptoContext& context) {
     CHECK_THROWS(
         CryptoError,
         hkdf_sha384(context, ikm, salt, info, 255 * 48 + 1));
-    // The RFC 5869 upper bound (255 * HashLen) is accepted.
+
     CHECK_NO_THROW(
         hkdf_sha384(context, ikm, salt, info, 255 * 48));
 
@@ -176,8 +164,6 @@ void test_hkdf(const CryptoContext& context) {
         )
     ));
 }
-
-// ---------------------------------------------------------------- AES-GCM
 
 void test_aes_gcm(const CryptoContext& context) {
     const SecureBytes key = context.random_bytes(32);
@@ -198,37 +184,31 @@ void test_aes_gcm(const CryptoContext& context) {
     CHECK(sealed.tag.size() == 16);
     CHECK(same(aes_256_gcm_decrypt(context, key, nonce, sealed.ciphertext, sealed.tag, aad), "attack at dawn"));
 
-    // Empty plaintext and empty AAD are valid.
     const AeadResult empty_sealed =
         aes_256_gcm_encrypt(context, key, nonce, SecureBytes{}, SecureBytes{});
     CHECK(empty_sealed.ciphertext.empty());
     CHECK_NO_THROW(
         aes_256_gcm_decrypt(context, key, nonce, empty_sealed.ciphertext, empty_sealed.tag, SecureBytes{}));
 
-    // Larger input exercises the chunked update loop.
     const SecureBytes large = context.random_bytes(300 * 1024);
     const AeadResult large_sealed = aes_256_gcm_encrypt(context, key, nonce, large, aad);
     const SecureBytes large_recovered =
         aes_256_gcm_decrypt(context, key, nonce, large_sealed.ciphertext, large_sealed.tag, aad);
     CHECK(large_recovered == large);
 
-    // Tampered ciphertext must be rejected.
     SecureBytes broken_ciphertext(sealed.ciphertext);
     broken_ciphertext[0] ^= 0x01;
     CHECK_THROWS(CryptoError,
         aes_256_gcm_decrypt(context, key, nonce, broken_ciphertext, sealed.tag, aad));
 
-    // Tampered tag must be rejected.
     SecureBytes broken_tag(sealed.tag);
     broken_tag[15] ^= 0x01;
     CHECK_THROWS(CryptoError,
         aes_256_gcm_decrypt(context, key, nonce, sealed.ciphertext, broken_tag, aad));
 
-    // Tampered AAD must be rejected.
     CHECK_THROWS(CryptoError,
         aes_256_gcm_decrypt(context, key, nonce, sealed.ciphertext, sealed.tag, bytes("headex")));
 
-    // Truncated ciphertext must be rejected.
     CHECK_THROWS(CryptoError,
         aes_256_gcm_decrypt(
             context,
@@ -238,8 +218,6 @@ void test_aes_gcm(const CryptoContext& context) {
             sealed.tag,
             aad));
 }
-
-// ----------------------------------------------------------------- ML-KEM
 
 void test_ml_kem(const CryptoContext& context) {
     const KEMKeyPair key_pair = generate_ml_kem_1024(context);
@@ -251,26 +229,20 @@ void test_ml_kem(const CryptoContext& context) {
               context, key_pair.private_key_der, encapsulation.ciphertext) ==
           encapsulation.shared_secret);
 
-    // Malformed keys are rejected.
     CHECK_THROWS(CryptoError, encapsulate_ml_kem_1024(context, bytes("not a key")));
     CHECK_THROWS(CryptoError, decapsulate_ml_kem_1024(context, bytes("not a key"), encapsulation.ciphertext));
 
-    // Wrong ciphertext lengths are rejected.
     CHECK_THROWS(CryptoError,
         decapsulate_ml_kem_1024(context, key_pair.private_key_der, SecureBytes(16)));
     CHECK_THROWS(CryptoError,
         decapsulate_ml_kem_1024(context, key_pair.private_key_der, SecureBytes(1567)));
 
-    // A different recipient decapsulates to a different (implicitly rejected)
-    // secret rather than the sender's shared secret.
     const KEMKeyPair other = generate_ml_kem_1024(context);
     const SecureBytes other_secret = decapsulate_ml_kem_1024(
         context, other.private_key_der, encapsulation.ciphertext);
     CHECK(other_secret.size() == 32);
     CHECK(!(other_secret == encapsulation.shared_secret));
 }
-
-// ---------------------------------------------------------------- ML-DSA
 
 void test_ml_kem_key_validation(const CryptoContext& context) {
     using qprotect::cpp::MlKem1024PublicKey;
@@ -350,22 +322,17 @@ void test_ml_dsa(const CryptoContext& context) {
     CHECK(!verify_ml_dsa_87(context, key_pair.public_key_der, bytes("tampered"), signature));
     CHECK(!verify_ml_dsa_87(context, key_pair.public_key_der, message, SecureBytes(signature.size() - 1, 0)));
 
-    // Empty messages sign and verify.
     const SecureBytes empty_signature =
         sign_ml_dsa_87(context, key_pair.private_key_der, SecureBytes{});
     CHECK(empty_signature.size() == 4627);
     CHECK(verify_ml_dsa_87(context, key_pair.public_key_der, SecureBytes{}, empty_signature));
 
-    // Malformed keys are rejected.
     CHECK_THROWS(CryptoError, sign_ml_dsa_87(context, bytes("not a key"), message));
     CHECK_THROWS(CryptoError, verify_ml_dsa_87(context, bytes("not a key"), message, signature));
 
-    // A signature from another key does not verify.
     const SignatureKeyPair other = generate_ml_dsa_87(context);
     CHECK(!verify_ml_dsa_87(context, other.public_key_der, message, signature));
 }
-
-// ------------------------------------------------------------- SecureBytes
 
 void test_secure_bytes() {
     SecureBytes value = bytes("sensitive");
@@ -390,8 +357,6 @@ void test_secure_bytes() {
     CHECK(!(left == bytes("different")));
 }
 
-// ----------------------------------------------------------------- context
-
 void test_context() {
     CHECK_THROWS(CryptoError, CryptoContext("bogus"));
     CHECK_THROWS(CryptoError, CryptoContext("base"));
@@ -400,10 +365,8 @@ void test_context() {
     CHECK_NO_THROW(context.assert_ready());
 }
 
-// -------------------------------------------------------------------- JSON
-
 void test_json_canonical() {
-    // Compact JSON sorts object keys and preserves UTF-8 characters.
+
     const qprotect::cpp::json::Object object = {
         {"b", qprotect::cpp::json::Value(1)},
         {"a", qprotect::cpp::json::Value("x")},
@@ -418,8 +381,6 @@ void test_json_canonical() {
     };
     CHECK(qprotect::cpp::json::Value(array).canonical() == R"([2,null,true,"s"])");
 
-    // Control characters use short escapes where available and lowercase
-    // \u00xx otherwise. DEL passes through unchanged.
     const std::string tricky = std::string("q\"uote\\back") + '\x1f' + '\x7f' + '\n';
     const qprotect::cpp::json::Object escape_object = {
         {"a", qprotect::cpp::json::Value(tricky)},
@@ -427,7 +388,6 @@ void test_json_canonical() {
     CHECK(qprotect::cpp::json::Value(escape_object).canonical() ==
           "{\"a\":\"q\\\"uote\\\\back\\u001f\x7f\\n\"}");
 
-    // Nested containers keep their keys sorted at every level.
     const qprotect::cpp::json::Object inner = {
         {"z", qprotect::cpp::json::Value(1)},
         {"a", qprotect::cpp::json::Value(2)},
@@ -438,7 +398,6 @@ void test_json_canonical() {
     CHECK(qprotect::cpp::json::Value(outer).canonical() ==
           R"({"nested":{"a":2,"z":1}})");
 
-    // Pretty output uses two-space indentation and sorted keys.
     const qprotect::cpp::json::Object pretty_object = {
         {"b", qprotect::cpp::json::Value(1)},
         {"a", qprotect::cpp::json::Value("x")},
@@ -483,7 +442,6 @@ void test_identity_normalization() {
     using qprotect::cpp::detail::normalize_identity;
     using qprotect::cpp::json::Value;
 
-    // Synthetic identifiers and coordinates; no captured device records.
     const Value normalized = normalize_identity(Value::parse(
         R"({"ip":"2001:0DB8:0:0:0:0:0:1","mac":"02-00-00-00-00-0A","serial":" TEST-DEVICE ","uuid":"00000000-0000-4000-A000-000000000001","wifi_bssid":"02.00.00.00.00.0B","gps":{"latitude":0,"longitude":0,"accuracy_m":8},"browser_fingerprint":{"timezone":"UTC"},"site":"test-site"})"));
     const auto& fields = normalized.as_object();
@@ -513,7 +471,33 @@ void test_identity_normalization() {
     CHECK_THROWS(EnvelopeError, normalize_identity(Value::parse(R"({"additional":[]})")));
 }
 
-// --------------------------------------------------------------- envelope
+void test_json_utf8() {
+    using qprotect::cpp::json::Value;
+    const std::vector<std::string> invalid = {
+        "\x80", "\xBF", "\xC0\x80", "\xC1\xBF", "\xC2", "\xC2x",
+        "\xE0\x80\x80", "\xE1\x80", "\xE1x\x80", "\xED\xA0\x80",
+        "\xED\xBF\xBF", "\xF0\x80\x80\x80", "\xF1\x80\x80",
+        "\xF4\x90\x80\x80", "\xF5\x80\x80\x80", "\xFF"
+    };
+    for (const auto& value : invalid) {
+        CHECK_THROWS(EnvelopeError, Value::parse("\"" + value + "\""));
+        CHECK_THROWS(EnvelopeError, Value::parse("{\"" + value + "\":0}"));
+        CHECK_THROWS(EnvelopeError, Value(value).canonical());
+        CHECK_THROWS(EnvelopeError, Value(value).pretty(2));
+        CHECK_THROWS(EnvelopeError, Value(qprotect::cpp::json::Object{{value, Value(0)}}).canonical());
+        CHECK_THROWS(EnvelopeError, qprotect::cpp::detail::normalize_identity(
+            Value::parse("{\"serial\":\"" + value + "\"}")));
+    }
+    const std::vector<std::string> valid = {
+        "ASCII", "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xED\x9F\xBF",
+        "\xEE\x80\x80", "\xEF\xBF\xBF", "\xF0\x90\x80\x80", "\xF4\x8F\xBF\xBF"
+    };
+    for (const auto& value : valid) {
+        CHECK(Value::parse(Value(value).canonical()).as_string() == value);
+        CHECK(Value::parse(Value(value).pretty(2)).as_string() == value);
+    }
+    CHECK(Value::parse("\"\\ud83d\\ude00\"").as_string() == "\xF0\x9F\x98\x80");
+}
 
 EncryptOptions options_for(
     const std::vector<SecureBytes>& recipients,
@@ -536,7 +520,6 @@ void test_envelope_roundtrip(const CryptoContext& context) {
 
     const SecureBytes payload = bytes("top secret identity record");
 
-    // Unsigned, single recipient.
     const Envelope single = encrypt_envelope(
         context, payload, options_for({alice.public_key_der}, "test"));
     CHECK(single.context == "test");
@@ -547,7 +530,6 @@ void test_envelope_roundtrip(const CryptoContext& context) {
         DecryptOptions{alice.private_key_der, std::nullopt});
     CHECK(single_recovered == payload);
 
-    // Multi-recipient, signed.
     const Envelope dual = encrypt_envelope(
         context,
         payload,
@@ -562,7 +544,6 @@ void test_envelope_roundtrip(const CryptoContext& context) {
     const DecryptOptions bob_decrypt{bob.private_key_der, signer.public_key_der};
     CHECK(decrypt_envelope(context, dual, bob_decrypt) == payload);
 
-    // Empty payload round-trips.
     const Envelope empty = encrypt_envelope(
         context, SecureBytes{}, options_for({alice.public_key_der}, "test"));
     CHECK(empty.ciphertext.empty());
@@ -583,18 +564,15 @@ void test_envelope_failures(const CryptoContext& context) {
         payload,
         options_for({alice.public_key_der}, "test", &signer.private_key_der));
 
-    // No recipients.
     CHECK_THROWS(EnvelopeError,
         encrypt_envelope(context, payload, options_for({}, "test")));
 
-    // Duplicate recipient keys are rejected before serialization.
     CHECK_THROWS(EnvelopeError,
         encrypt_envelope(
             context,
             payload,
             options_for({alice.public_key_der, alice.public_key_der}, "test")));
 
-    // Invalid contexts.
     CHECK_THROWS(EnvelopeError,
         encrypt_envelope(context, payload, options_for({alice.public_key_der}, "")));
     CHECK_THROWS(EnvelopeError,
@@ -604,21 +582,18 @@ void test_envelope_failures(const CryptoContext& context) {
     CHECK_THROWS(EnvelopeError,
         encrypt_envelope(context, payload, options_for({alice.public_key_der}, "não-ascii")));
 
-    // Wrong recipient key.
     CHECK_THROWS(EnvelopeError,
         decrypt_envelope(
             context,
             envelope,
             DecryptOptions{mallory.private_key_der, signer.public_key_der}));
 
-    // Signed envelope without a signer public key.
     CHECK_THROWS(EnvelopeError,
         decrypt_envelope(
             context,
             envelope,
             DecryptOptions{alice.private_key_der, std::nullopt}));
 
-    // Providing an expected signer requires the envelope to be signed.
     const Envelope unsigned_for_signer = encrypt_envelope(
         context, payload, options_for({alice.public_key_der}, "test"));
     CHECK_THROWS(EnvelopeError,
@@ -627,14 +602,12 @@ void test_envelope_failures(const CryptoContext& context) {
             unsigned_for_signer,
             DecryptOptions{alice.private_key_der, signer.public_key_der}));
 
-    // Wrong signer public key: key_id mismatch.
     CHECK_THROWS(EnvelopeError,
         decrypt_envelope(
             context,
             envelope,
             DecryptOptions{alice.private_key_der, other_signer.public_key_der}));
 
-    // Tampered payload ciphertext.
     Envelope broken = envelope;
     broken.ciphertext[0] ^= 0x01;
     CHECK_THROWS(EnvelopeError,
@@ -643,7 +616,6 @@ void test_envelope_failures(const CryptoContext& context) {
             broken,
             DecryptOptions{alice.private_key_der, signer.public_key_der}));
 
-    // Tampered wrapped key.
     Envelope broken_wrap = envelope;
     broken_wrap.recipients[0].wrapped_key[0] ^= 0x01;
     CHECK_THROWS(EnvelopeError,
@@ -652,7 +624,6 @@ void test_envelope_failures(const CryptoContext& context) {
             broken_wrap,
             DecryptOptions{alice.private_key_der, signer.public_key_der}));
 
-    // Tampered signature.
     Envelope broken_sig = envelope;
     (*broken_sig.signature)[0] ^= 0x01;
     CHECK_THROWS(EnvelopeError,
@@ -661,7 +632,6 @@ void test_envelope_failures(const CryptoContext& context) {
             broken_sig,
             DecryptOptions{alice.private_key_der, signer.public_key_der}));
 
-    // Tampered context changes the HKDF info and AAD together.
     Envelope broken_context = envelope;
     broken_context.context = "other";
     CHECK_THROWS(EnvelopeError,
@@ -682,16 +652,33 @@ void test_envelope_serialization(const CryptoContext& context) {
 
     const std::string json = envelope.to_json();
     const Envelope reparsed = Envelope::from_json(json);
-    // Re-serializing the parsed envelope is byte-identical.
+    for (const std::string encoded : {"AA=!", "AA= ", "AA=\n", "AA=A", "AA", "A===", "AB==", "AAB="}) {
+        auto document = qprotect::cpp::json::Value::parse(json).as_object();
+        document["ciphertext"] = qprotect::cpp::json::Value(encoded);
+        CHECK_THROWS(EnvelopeError, Envelope::from_json(qprotect::cpp::json::Value(document).canonical()));
+    }
+    for (const std::string encoded : {"", "AA==", "AAA=", "AAAA"}) {
+        auto document = qprotect::cpp::json::Value::parse(json).as_object();
+        document["ciphertext"] = qprotect::cpp::json::Value(encoded);
+        CHECK_NO_THROW(Envelope::from_json(qprotect::cpp::json::Value(document).canonical()));
+    }
+    for (const char* field : {"tag", "signature"}) {
+        auto document = qprotect::cpp::json::Value::parse(json).as_object();
+        std::string encoded = document.at(field).as_string();
+        CHECK(encoded.ends_with("=="));
+        encoded.back() = '!';
+        document[field] = qprotect::cpp::json::Value(encoded);
+        CHECK_THROWS(EnvelopeError, Envelope::from_json(qprotect::cpp::json::Value(document).canonical()));
+    }
+
     CHECK(reparsed.to_json() == json);
-    // And it still decrypts.
+
     CHECK(decrypt_envelope(
               context,
               reparsed,
               DecryptOptions{alice.private_key_der, signer.public_key_der}) ==
           bytes("roundtrip"));
 
-    // Malformed and unsupported documents are rejected.
     CHECK_THROWS(EnvelopeError, Envelope::from_json(""));
     CHECK_THROWS(EnvelopeError, Envelope::from_json("[]"));
     CHECK_THROWS(EnvelopeError, Envelope::from_json("{"));
@@ -725,7 +712,6 @@ void test_envelope_serialization(const CryptoContext& context) {
     CHECK_THROWS(EnvelopeError, Envelope::from_json(replace_once(
         json, envelope.created_at, "2026-02-30T12:00:00.000000Z")));
 
-    // Duplicated recipient entries are rejected.
     const KEMKeyPair bob = generate_ml_kem_1024(context);
     const Envelope two = encrypt_envelope(
         context,
@@ -739,7 +725,6 @@ void test_envelope_serialization(const CryptoContext& context) {
     duplicated.insert(second, block);
     CHECK_THROWS(EnvelopeError, Envelope::from_json(duplicated));
 
-    // Signature metadata without a signature is rejected.
     const Envelope unsigned_envelope = encrypt_envelope(
         context, bytes("unsigned"), options_for({alice.public_key_der}, "serial"));
     const std::string unsigned_json = unsigned_envelope.to_json();
@@ -749,8 +734,6 @@ void test_envelope_serialization(const CryptoContext& context) {
             "\"signature_algorithm\": null",
             "\"signature_algorithm\": \"ML-DSA-87\"")));
 }
-
-// -------------------------------------------------------------------- keys
 
 void test_key_files(const CryptoContext& context) {
     char temporary[] = "./qprotect-cpp-unit-keys-XXXXXX";
@@ -765,7 +748,6 @@ void test_key_files(const CryptoContext& context) {
     write_private_key_pem(context, key_pair.private_key_der, private_pem);
     write_public_key_pem(context, key_pair.public_key_der, public_pem);
 
-    // PEM round-trips through the same key_id.
     const SecureBytes loaded_public = load_public_key_file(context, public_pem);
     CHECK(key_id_for_public_key(context, loaded_public) == key_pair.key_id);
     const SecureBytes loaded_private = load_private_key_file(context, private_pem);
@@ -776,7 +758,6 @@ void test_key_files(const CryptoContext& context) {
         write_private_key_pem(context, key_pair.private_key_der, private_pem));
     CHECK(load_private_key_file(context, private_pem) == loaded_private);
 
-    // Wrong key type in a public key slot is rejected.
     CHECK_THROWS(EnvelopeError, load_public_key_file(context, private_pem));
     CHECK_THROWS(EnvelopeError, load_private_key_file(context, public_pem));
 
@@ -786,7 +767,7 @@ void test_key_files(const CryptoContext& context) {
 }
 
 void test_private_key_envelopes(const CryptoContext& context) {
-    // Every private key is generated for this test run.
+
     const KEMKeyPair recipient = generate_ml_kem_1024(context);
     const SignatureKeyPair signer = generate_ml_dsa_87(context);
     const KEMKeyPair kem_owner = generate_ml_kem_1024(context);
@@ -1188,7 +1169,7 @@ void test_hardware_fixture_discovery() {
     CHECK(!cleanup_error);
 }
 
-} // namespace
+}
 
 int main() {
     try {
@@ -1205,6 +1186,7 @@ int main() {
         test_context();
         test_json_canonical();
         test_json_parse();
+        test_json_utf8();
         test_identity_normalization();
         test_envelope_roundtrip(context);
         test_envelope_failures(context);

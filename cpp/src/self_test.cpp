@@ -261,8 +261,7 @@ void run_check(SelfTestReport& report, const std::string& name, Function&& funct
     add_check(report, name, passed);
 }
 
-
-} // namespace
+}
 
 SelfTestReport run_self_tests(const CryptoContext& context) {
     SelfTestReport report;
@@ -281,9 +280,7 @@ SelfTestReport run_self_tests(const CryptoContext& context) {
     run_check(report, "random_bytes", [&context]() {
         const SecureBytes first = context.random_bytes(64);
         const SecureBytes second = context.random_bytes(64);
-        // Two independent random outputs must differ. Do not require every
-        // byte position to differ: for uniform 64-byte strings that has only
-        // a (255/256)^64 ~= 78% chance of holding and makes the test flaky.
+
         return first.size() == 64 && second.size() == 64 && first != second;
     });
 
@@ -513,7 +510,7 @@ SelfTestReport run_self_tests(const CryptoContext& context) {
             ),
             invalid_signature
         );
-        // ML-DSA-87 signatures are exactly 4627 bytes (FIPS 204).
+
         return key_pair.key_id.size() == 32 && signature.size() == 4627 &&
                valid && invalid_rejected;
     });
@@ -521,4 +518,4 @@ SelfTestReport run_self_tests(const CryptoContext& context) {
     return report;
 }
 
-} // namespace qprotect::cpp
+}
