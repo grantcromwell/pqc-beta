@@ -1,3 +1,3 @@
 #qprotect
 
-work in progress
+ai-assisted pqc project, work in progress
