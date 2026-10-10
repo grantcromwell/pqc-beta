@@ -1,6 +1,7 @@
 CXX ?= g++
 AR ?= ar
 CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=3
+DEPFLAGS := -MMD -MP
 CPPFLAGS := -Iinclude $(shell pkg-config --cflags openssl)
 LDFLAGS := $(shell pkg-config --libs libcrypto)
 
@@ -27,6 +28,11 @@ SOURCES := \
     src/hardware.cpp
 
 OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
+DEPENDENCIES := $(OBJECTS:.o=.d) $(BUILD_DIR)/selftest_main.d $(BUILD_DIR)/qprotect_tool.d \
+	$(BUILD_DIR)/unit_tests.d $(BUILD_DIR)/native_integration.d $(BUILD_DIR)/startup_tests.d \
+	$(BUILD_DIR)/diagnostics_tests.d
+
+-include $(DEPENDENCIES)
 
 .PHONY: all test integration clean
 
@@ -36,7 +42,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: src/%.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(CPPFLAGS) -c $< -o $@
 
 $(LIBRARY): $(OBJECTS)
 	$(AR) rcs $@ $^
@@ -63,22 +69,22 @@ $(DIAGNOSTICS_TESTS): $(BUILD_DIR)/diagnostics_tests.o $(LIBRARY)
 	$(CXX) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/selftest_main.o: apps/selftest_main.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -Iinclude -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -Iinclude -c $< -o $@
 
 $(BUILD_DIR)/qprotect_tool.o: apps/qprotect_tool.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -Iinclude -Isrc -c $< -o $@
 
 $(BUILD_DIR)/unit_tests.o: tests/unit_tests.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(CPPFLAGS) -Isrc -c $< -o $@
 
 $(BUILD_DIR)/native_integration.o: tests/native_integration.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/startup_tests.o: tests/startup_tests.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -Iinclude -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -Iinclude -c $< -o $@
 
 $(BUILD_DIR)/diagnostics_tests.o: tests/diagnostics_tests.cpp apps/qprotect_tool.cpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(CPPFLAGS) -Isrc -c $< -o $@
 
 test: $(SELFTEST) $(UNITTESTS) $(STARTUP_TESTS) $(DIAGNOSTICS_TESTS)
 	$(SELFTEST)

@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "qprotect/secure_bytes.hpp"
 
 namespace qprotect::cpp {
 
@@ -49,6 +50,7 @@ private:
     std::vector<std::string> close_args_;
     std::string confirmation_;
     std::string header_identity_;
+    SecureBytes key_material_;
 
     bool validated_ = false;
 };

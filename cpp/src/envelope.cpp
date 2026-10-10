@@ -466,6 +466,9 @@ Envelope Envelope::from_json(const std::string& text) {
     } else if (has_algorithm) {
         throw EnvelopeError("signature metadata without a signature");
     }
+    if (!envelope.signature.has_value() && envelope.signer_key_id.has_value()) {
+        throw EnvelopeError("signer metadata without a signature");
+    }
 
     if (envelope.payload_iv.size() != kPayloadIvLength ||
         envelope.tag.size() != kTagLength) {
@@ -566,6 +569,10 @@ SecureBytes decrypt_envelope(
 ) {
     if (envelope.version != kEnvelopeVersion) {
         throw EnvelopeError("unsupported envelope version");
+    }
+
+    if (envelope.signature.has_value() != envelope.signer_key_id.has_value()) {
+        throw EnvelopeError("inconsistent signature metadata");
     }
 
     if ((options.require_signature || options.signer_public_key_der.has_value()) &&

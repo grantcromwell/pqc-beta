@@ -20,6 +20,7 @@
 #include <openssl/crypto.h>
 #include <span>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -355,6 +356,64 @@ void reject_same_path(const std::string& input, const std::string& output) {
     }
 }
 
+void write_key_pair(const CryptoContext& context,
+                    std::span<const unsigned char> privateKey,
+                    std::span<const unsigned char> publicKey,
+                    const std::string& privatePath,
+                    const std::string& publicPath,
+                    bool force) {
+    const std::string suffix = ".qprotect-stage-" + std::to_string(::getpid());
+    const std::filesystem::path privateTemp = privatePath + suffix;
+    const std::filesystem::path publicTemp = publicPath + suffix;
+    const std::filesystem::path privateBackup = privatePath + suffix + ".backup";
+    const std::filesystem::path publicBackup = publicPath + suffix + ".backup";
+    bool privateSaved = false;
+    bool publicSaved = false;
+    bool privateCommitted = false;
+    bool publicCommitted = false;
+    try {
+        qprotect::cpp::write_private_key_pem(context, privateKey, privateTemp.string(), false);
+        qprotect::cpp::write_public_key_pem(context, publicKey, publicTemp.string(), false);
+        if (force && std::filesystem::exists(privatePath)) {
+            std::filesystem::rename(privatePath, privateBackup);
+            privateSaved = true;
+        }
+        if (force && std::filesystem::exists(publicPath)) {
+            std::filesystem::rename(publicPath, publicBackup);
+            publicSaved = true;
+        }
+        if (force) {
+            std::filesystem::rename(privateTemp, privatePath);
+            privateCommitted = true;
+            std::filesystem::rename(publicTemp, publicPath);
+            publicCommitted = true;
+        } else {
+            if (::link(privateTemp.c_str(), privatePath.c_str()) != 0) {
+                throw EnvelopeError("unable to commit private key output");
+            }
+            privateCommitted = true;
+            if (::link(publicTemp.c_str(), publicPath.c_str()) != 0) {
+                throw EnvelopeError("unable to commit public key output");
+            }
+            publicCommitted = true;
+        }
+        std::error_code cleanupError;
+        std::filesystem::remove(privateTemp, cleanupError);
+        std::filesystem::remove(publicTemp, cleanupError);
+        if (privateSaved) std::filesystem::remove(privateBackup, cleanupError);
+        if (publicSaved) std::filesystem::remove(publicBackup, cleanupError);
+    } catch (...) {
+        std::error_code error;
+        if (privateCommitted) std::filesystem::remove(privatePath, error);
+        if (publicCommitted) std::filesystem::remove(publicPath, error);
+        if (privateSaved) std::filesystem::rename(privateBackup, privatePath, error);
+        if (publicSaved) std::filesystem::rename(publicBackup, publicPath, error);
+        std::filesystem::remove(privateTemp, error);
+        std::filesystem::remove(publicTemp, error);
+        throw;
+    }
+}
+
 int run_keygen(const CryptoContext& context, const Arguments& args) {
     if (args.key_type != "kem" && args.key_type != "sign") {
         std::cerr << "error: --type must be kem or sign\n";
@@ -373,18 +432,14 @@ int run_keygen(const CryptoContext& context, const Arguments& args) {
     if (args.key_type == "kem") {
         const qprotect::cpp::KEMKeyPair key_pair =
             qprotect::cpp::generate_ml_kem_1024(context);
-        qprotect::cpp::write_private_key_pem(
-            context, key_pair.private_key_der, args.private_path, args.force);
-        qprotect::cpp::write_public_key_pem(
-            context, key_pair.public_key_der, args.public_path, args.force);
+        write_key_pair(context, key_pair.private_key_der, key_pair.public_key_der,
+                       args.private_path, args.public_path, args.force);
         std::cout << "generated ML-KEM-1024 keypair, key_id " << key_pair.key_id << "\n";
     } else {
         const qprotect::cpp::SignatureKeyPair key_pair =
             qprotect::cpp::generate_ml_dsa_87(context);
-        qprotect::cpp::write_private_key_pem(
-            context, key_pair.private_key_der, args.private_path, args.force);
-        qprotect::cpp::write_public_key_pem(
-            context, key_pair.public_key_der, args.public_path, args.force);
+        write_key_pair(context, key_pair.private_key_der, key_pair.public_key_der,
+                       args.private_path, args.public_path, args.force);
         std::cout << "generated ML-DSA-87 keypair, key_id " << key_pair.key_id << "\n";
     }
     return 0;

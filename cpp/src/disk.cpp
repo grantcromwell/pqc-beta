@@ -14,6 +14,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #include <cstdlib>
 #include <array>
 #include <algorithm>
@@ -46,6 +47,14 @@ public:
 
     FileDescriptor(const FileDescriptor&) = delete;
     FileDescriptor& operator=(const FileDescriptor&) = delete;
+    FileDescriptor(FileDescriptor&& other) noexcept : fd_(other.release()) {}
+    FileDescriptor& operator=(FileDescriptor&& other) noexcept {
+        if (this != &other) {
+            if (fd_ >= 0) ::close(fd_);
+            fd_ = other.release();
+        }
+        return *this;
+    }
 
     int get() const { return fd_; }
     int release() { const int fd = fd_; fd_ = -1; return fd; }
@@ -57,7 +66,7 @@ private:
 ProcessResult run_process(const std::vector<std::string>& arguments,
                           bool capture,
                           int timeout_seconds = 0,
-                          int inherited_fd = -1) {
+                          const std::vector<int>& inherited_fds = {}) {
     if (arguments.empty()) {
         throw EnvelopeError("empty external command");
     }
@@ -86,7 +95,9 @@ ProcessResult run_process(const std::vector<std::string>& arguments,
             argv.push_back(const_cast<char*>(argument.c_str()));
         }
         argv.push_back(nullptr);
-        if (inherited_fd >= 0 && ::fcntl(inherited_fd, F_SETFD, 0) < 0) _exit(127);
+        for (const int inherited_fd : inherited_fds) {
+            if (inherited_fd >= 0 && ::fcntl(inherited_fd, F_SETFD, 0) < 0) _exit(127);
+        }
 
         char locale[] = "LC_ALL=C";
         char language[] = "LANG=C";
@@ -194,6 +205,24 @@ void validate_key_file(const std::string& path) {
     if ((status.st_mode & 0077) != 0) {
         throw EnvelopeError("key file permissions must be 0600 or stricter");
     }
+}
+
+SecureBytes snapshot_key_file(const std::string& path) {
+    FileDescriptor key(::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK));
+    struct stat status {};
+    if (key.get() < 0 || ::fstat(key.get(), &status) != 0 || !S_ISREG(status.st_mode) ||
+        status.st_size <= 0 || (status.st_mode & 0077) != 0 || status.st_size > 16 * 1024 * 1024) {
+        throw EnvelopeError("key file changed or is invalid");
+    }
+    SecureBytes content(static_cast<std::size_t>(status.st_size));
+    std::size_t offset = 0;
+    while (offset < content.size()) {
+        const ssize_t count = ::read(key.get(), content.data() + offset, content.size() - offset);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) throw EnvelopeError("unable to snapshot key file");
+        offset += static_cast<std::size_t>(count);
+    }
+    return content;
 }
 
 void validate_mapper(const std::string& name) {
@@ -399,10 +428,6 @@ void validate_luks2_plan_internal(const Luks2Plan& plan) {
     if (current.canonical_path != plan.device_ || current.major != plan.major_ || current.minor != plan.minor_) {
         throw EnvelopeError("block-device identity changed after planning");
     }
-    if (plan.options_.key_file) {
-        validate_key_file(*plan.options_.key_file);
-    }
-
     if (plan.options_.header_file &&
         detail::header_identity(*plan.options_.header_file, plan.options_.action == DiskAction::Format) !=
             plan.header_identity_) {
@@ -491,29 +516,44 @@ void validate_format_target_unused_internal(const Luks2Plan& plan) {
 
 namespace {
 
-void execute(const std::vector<std::string>& arguments, int inherited_fd = -1) {
-    const ProcessResult result = run_process(arguments, false, 0, inherited_fd);
+void execute(const std::vector<std::string>& arguments, const std::vector<int>& inherited_fds = {}) {
+    const ProcessResult result = run_process(arguments, false, 0, inherited_fds);
     if (result.exit_code != 0) {
         throw EnvelopeError(arguments.front() + " failed with exit code " + std::to_string(result.exit_code));
     }
 }
 
 void execute_with_header(std::vector<std::string> arguments, const DiskPlanOptions& options,
-                         const std::string& identity) {
-    if (!options.header_file) {
+                         const std::string& identity, const SecureBytes& keyMaterial) {
+    std::vector<int> inheritedFds;
+    FileDescriptor header(options.header_file ? detail::open_validated_header(*options.header_file,
+                          options.action == DiskAction::Format, identity) : -1);
+    if (header.get() >= 0) inheritedFds.push_back(header.get());
+    FileDescriptor key(-1);
+    if (!keyMaterial.empty()) {
+        key = FileDescriptor(::memfd_create("qprotect-key", MFD_CLOEXEC));
+        if (key.get() < 0 || ::fchmod(key.get(), 0600) != 0 ||
+            ::write(key.get(), keyMaterial.data(), keyMaterial.size()) != static_cast<ssize_t>(keyMaterial.size()) ||
+            ::lseek(key.get(), 0, SEEK_SET) < 0) throw EnvelopeError("unable to stage key material");
+        inheritedFds.push_back(key.get());
+        for (std::string& argument : arguments) {
+            if (options.key_file && argument == *options.key_file) {
+                argument = "/proc/self/fd/" + std::to_string(key.get());
+            }
+        }
+    }
+    if (!options.header_file && inheritedFds.empty()) {
         execute(arguments);
         return;
     }
-
-    FileDescriptor header(detail::open_validated_header(*options.header_file,
-                          options.action == DiskAction::Format, identity));
-    const auto option = std::find(arguments.begin(), arguments.end(), "--header");
-    if (option == arguments.end() || std::next(option) == arguments.end()) {
-        throw EnvelopeError("missing detached header argument");
+    if (options.header_file) {
+        const auto option = std::find(arguments.begin(), arguments.end(), "--header");
+        if (option == arguments.end() || std::next(option) == arguments.end()) {
+            throw EnvelopeError("missing detached header argument");
+        }
+        *std::next(option) = "/proc/self/fd/" + std::to_string(header.get());
     }
-
-    *std::next(option) = "/proc/self/fd/" + std::to_string(header.get());
-    execute(arguments, header.get());
+    execute(arguments, inheritedFds);
 }
 
 }
@@ -612,6 +652,7 @@ Luks2Plan build_luks2_plan(const DiskPlanOptions& options) {
     plan.device_ = device.canonical_path;
     plan.major_ = device.major;
     plan.minor_ = device.minor;
+    if (options.key_file) plan.key_material_ = snapshot_key_file(*options.key_file);
     if (options.action != DiskAction::Format && options.action != DiskAction::Open &&
         options.action != DiskAction::Close) {
         throw EnvelopeError("invalid disk action");
@@ -638,6 +679,10 @@ Luks2Plan build_luks2_plan(const DiskPlanOptions& options) {
 
     auto confirmation_material = plan.format_args_;
     if (options.header_file) confirmation_material.push_back(plan.header_identity_);
+    if (!plan.key_material_.empty()) {
+        confirmation_material.emplace_back(
+            reinterpret_cast<const char*>(plan.key_material_.data()), plan.key_material_.size());
+    }
 
     plan.confirmation_ = format_confirmation(confirmation_material,
         std::filesystem::path(plan.device_).filename().string(), device.major, device.minor);
@@ -693,7 +738,7 @@ void execute_luks2_format(const Luks2Plan& plan, const std::string& confirmation
         throw EnvelopeError("destructive operation refused; pass the exact confirmation from the reviewed plan");
     }
     validate_format_target_unused_internal(plan);
-    execute_with_header(plan.format_args_, plan.options_, plan.header_identity_);
+    execute_with_header(plan.format_args_, plan.options_, plan.header_identity_, plan.key_material_);
 }
 
 void execute_luks2_open(const Luks2Plan& plan) {
@@ -703,7 +748,7 @@ void execute_luks2_open(const Luks2Plan& plan) {
     if (std::filesystem::exists(std::filesystem::path("/dev/mapper") / plan.options_.mapper_name)) {
         throw EnvelopeError("requested mapper name is already active");
     }
-    execute_with_header(plan.open_args_, plan.options_, plan.header_identity_);
+    execute_with_header(plan.open_args_, plan.options_, plan.header_identity_, plan.key_material_);
 }
 
 void execute_luks2_close(const Luks2Plan& plan) {
